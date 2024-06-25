@@ -133,7 +133,7 @@ fn save_ppm(image: &PpmFile, name: &str) -> std::io::Result<()> {
     file.write_all(
         format!("P6\n{}\n{}\n{}\n", image.width, image.height, image.max_val).as_bytes(),
     )?;
-    // ok, this is not optimal but not sure how to convert image.pixels to bytes
+
     let mut bytes: Vec<u8> = Vec::new();
     bytes.resize(image.pixels.len() * 3, 0u8);
     for (i, pixel) in image.pixels.iter().enumerate() {
