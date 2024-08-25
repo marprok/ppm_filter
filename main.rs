@@ -48,10 +48,8 @@ struct PpmFile {
 }
 
 fn parse_ppm(file: &str) -> Result<PpmFile, String> {
-    let bytes: Vec<u8> = match fs::read(file) {
-        Ok(bytes) => bytes,
-        Err(e) => return Err(format!("Could not read file: {}", e)),
-    };
+    let bytes: Vec<u8> =
+        fs::read(file).unwrap_or_else(|error| panic!("Could not read file: {}", error));
 
     if bytes.len() < 2 {
         return Err(format!("PPM file too small!"));
@@ -60,53 +58,38 @@ fn parse_ppm(file: &str) -> Result<PpmFile, String> {
     let mut from = 0;
     let delims: Vec<u8> = vec![0x20, 0x09, 0x0D, 0x0A, 0x23];
 
-    let mut token = next_token(&bytes, &mut from, &delims);
-    let magic_number = match token {
-        Ok(v) => v,
-        Err(e) => return Err(format!("Magic number: {}", e)),
-    };
+    let magic_number = next_token(&bytes, &mut from, &delims)
+        .unwrap_or_else(|error| panic!("Magic number: {}", error));
 
-    token = next_token(&bytes, &mut from, &delims);
-    let width = match token {
-        Ok(v) => match v.parse::<usize>() {
-            Ok(v) => v,
-            Err(e) => return Err(format!("Width not a number: {}", e)),
-        },
-        Err(e) => return Err(format!("Width: {}", e)),
-    };
+    let width = next_token(&bytes, &mut from, &delims)
+        .unwrap_or_else(|error| panic!("Could not read width: {}", error))
+        .parse::<usize>()
+        .unwrap_or_else(|error| panic!("Width not a number: {}", error));
 
-    token = next_token(&bytes, &mut from, &delims);
-    let height = match token {
-        Ok(v) => match v.parse::<usize>() {
-            Ok(v) => v,
-            Err(e) => return Err(format!("Height not a number: {}", e)),
-        },
-        Err(e) => return Err(format!("Height: {}", e)),
-    };
+    let height = next_token(&bytes, &mut from, &delims)
+        .unwrap_or_else(|error| panic!("Could not read height: {}", error))
+        .parse::<usize>()
+        .unwrap_or_else(|error| panic!("Height not a number: {}", error));
 
-    token = next_token(&bytes, &mut from, &delims);
-    let max_color_val = match token {
-        Ok(v) => match v.parse::<usize>() {
-            Ok(v) => v,
-            Err(e) => return Err(format!("Max color value not a number: {}", e)),
-        },
-        Err(e) => return Err(format!("Max color value: {}", e)),
-    };
+    let max_color_val = next_token(&bytes, &mut from, &delims)
+        .unwrap_or_else(|error| panic!("Could not read max color value: {}", error))
+        .parse::<usize>()
+        .unwrap_or_else(|error| panic!("Max color value not a number: {}", error));
 
     if magic_number != "P6" {
-        return Err(format!("Unknown magic number: {}", magic_number));
+        panic!("Unknown magic number: {}", magic_number);
     }
 
     if max_color_val != 255 {
-        return Err(format!("Maximum color value is not 255!"));
+        panic!("Maximum color value is not 255!");
     }
 
     // The last char should be whitespace
     if bytes[from] == 0x23 || !delims.contains(&bytes[from]) {
-        return Err(format!(
+        panic!(
             "The header should end with a whitespace but {} found!",
             bytes[from]
-        ));
+        );
     }
 
     from += 1;
@@ -253,11 +236,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         panic!("Expected a file!");
     }
 
-    let mut ppm = match parse_ppm(&args[1]) {
-        Ok(ppm) => ppm,
-        Err(msg) => panic!("{}", msg),
-    };
-
+    let mut ppm = parse_ppm(&args[1]).unwrap_or_else(|error| panic!("{}", error));
     for arg in &args[2..] {
         match arg.as_str() {
             "gray" => apply_grayscale(&mut ppm),
