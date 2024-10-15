@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -230,6 +231,85 @@ fn apply_sobel(image: &mut PpmFile) {
     }
 }
 
+#[derive(Clone)]
+struct Energy {
+    value: u32,
+    parent: usize,
+}
+
+fn resize_width(image: &mut PpmFile, columns: usize) {
+    for i in 0..columns {
+        let mut pixel_energy: Vec<Energy> = Vec::new();
+        for y in 0..image.height {
+            for x in 0..image.width {
+                pixel_energy.push(Energy {
+                    value: (image.pixels[y * image.width + x].r * 255.0) as u32,
+                    parent: 0,
+                });
+            }
+        }
+        for y in 1..image.height {
+            for x in 0..image.width {
+                let mut energy = pixel_energy[y * image.width + x].value;
+                let mut pixel_id: usize = y * image.width + x;
+
+                let mut top_left = 0;
+                if x > 0 {
+                    top_left = match pixel_energy.get((y - 1) * image.width + x - 1) {
+                        Some(energy) => energy.value,
+                        None => 0,
+                    };
+                }
+
+                let top_center = match pixel_energy.get((y - 1) * image.width + x) {
+                    Some(energy) => energy.value,
+                    None => 0,
+                };
+                let top_right = match pixel_energy.get((y - 1) * image.width + x + 1) {
+                    Some(energy) => energy.value,
+                    None => 0,
+                };
+
+                if top_left > top_right {
+                    if top_left > top_center {
+                        energy += top_left;
+                        if x > 0 {
+                            pixel_id = (y - 1) * image.width + x - 1;
+                        }
+                    } else {
+                        energy += top_center;
+                        pixel_id = (y - 1) * image.width + x;
+                    }
+                } else if top_right > top_center {
+                    energy += top_right;
+                    pixel_id = (y - 1) * image.width + x + 1;
+                } else {
+                    energy += top_center;
+                    pixel_id = (y - 1) * image.width + x;
+                }
+                pixel_energy[y * image.width + x].value = energy;
+                pixel_energy[y * image.width + x].parent = pixel_id;
+            }
+        }
+
+        let mut min_id = 0;
+        let mut min_energy: u32 = 255;
+        for i in 0..image.width {
+            if min_energy > pixel_energy[(image.height - 1) * image.width + i].value {
+                min_energy = pixel_energy[(image.height - 1) * image.width + i].value;
+                min_id = i;
+            }
+        }
+        let mut current = (image.height - 1) * image.width + min_id;
+        for _ in (0..image.height).rev() {
+            image.pixels[current].r = 1.0;
+            image.pixels[current].g = 0.0;
+            image.pixels[current].b = 0.0;
+            current = pixel_energy[current].parent;
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -242,6 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "gray" => apply_grayscale(&mut ppm),
             "gauss" => apply_gaussian_blur(&mut ppm),
             "sobel" => apply_sobel(&mut ppm),
+            "resize" => resize_width(&mut ppm, 1),
             _ => panic!("Unnexpected filter given: {}", arg),
         }
     }
