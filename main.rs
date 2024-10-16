@@ -253,25 +253,25 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
                 let mut energy = pixel_energy[y * image.width + x].value;
                 let mut pixel_id: usize = y * image.width + x;
 
-                let mut top_left = 0;
+                let mut top_left = u32::MAX;
                 if x > 0 {
                     top_left = match pixel_energy.get((y - 1) * image.width + x - 1) {
-                        Some(energy) => energy.value,
-                        None => 0,
+                        Some(ref energy) => energy.value,
+                        None => u32::MAX,
                     };
                 }
 
                 let top_center = match pixel_energy.get((y - 1) * image.width + x) {
-                    Some(energy) => energy.value,
-                    None => 0,
+                    Some(ref energy) => energy.value,
+                    None => u32::MAX,
                 };
                 let top_right = match pixel_energy.get((y - 1) * image.width + x + 1) {
-                    Some(energy) => energy.value,
-                    None => 0,
+                    Some(ref energy) => energy.value,
+                    None => u32::MAX,
                 };
 
-                if top_left > top_right {
-                    if top_left > top_center {
+                if top_left < top_right {
+                    if top_left < top_center {
                         energy += top_left;
                         if x > 0 {
                             pixel_id = (y - 1) * image.width + x - 1;
@@ -280,7 +280,7 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
                         energy += top_center;
                         pixel_id = (y - 1) * image.width + x;
                     }
-                } else if top_right > top_center {
+                } else if top_right < top_center {
                     energy += top_right;
                     pixel_id = (y - 1) * image.width + x + 1;
                 } else {
@@ -302,9 +302,9 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         }
         let mut current = (image.height - 1) * image.width + min_id;
         for _ in (0..image.height).rev() {
-            image.pixels[current].r = 1.0;
-            image.pixels[current].g = 0.0;
-            image.pixels[current].b = 0.0;
+            //image.pixels[current].r = 1.0;
+            //image.pixels[current].g = 0.0;
+            //image.pixels[current].b = 0.0;
             current = pixel_energy[current].parent;
         }
     }
