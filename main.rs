@@ -243,6 +243,7 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
     apply_sobel(image);
     for _ in 0..columns {
         let mut pixel_energy: Vec<Energy> = Vec::new();
+        pixel_energy.reserve(image.width * image.height);
         for y in 0..image.height {
             for x in 0..image.width {
                 pixel_energy.push(Energy {
