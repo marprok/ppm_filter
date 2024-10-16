@@ -305,7 +305,7 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
             }
         }
         let mut current = (image.height - 1) * image.width + min_id;
-        for _ in (0..image.height).rev() {
+        for _ in 0..image.height {
             original_image_pix.remove(current);
             current = pixel_energy[current].parent;
         }
