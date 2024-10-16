@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -238,7 +237,11 @@ struct Energy {
 }
 
 fn resize_width(image: &mut PpmFile, columns: usize) {
-    for i in 0..columns {
+    let mut original_image_pix = image.pixels.clone();
+    apply_grayscale(image);
+    apply_gaussian_blur(image);
+    apply_sobel(image);
+    for _ in 0..columns {
         let mut pixel_energy: Vec<Energy> = Vec::new();
         for y in 0..image.height {
             for x in 0..image.width {
@@ -293,7 +296,7 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         }
 
         let mut min_id = 0;
-        let mut min_energy: u32 = 255;
+        let mut min_energy: u32 = u32::MAX;
         for i in 0..image.width {
             if min_energy > pixel_energy[(image.height - 1) * image.width + i].value {
                 min_energy = pixel_energy[(image.height - 1) * image.width + i].value;
@@ -302,30 +305,25 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         }
         let mut current = (image.height - 1) * image.width + min_id;
         for _ in (0..image.height).rev() {
-            //image.pixels[current].r = 1.0;
-            //image.pixels[current].g = 0.0;
-            //image.pixels[current].b = 0.0;
+            original_image_pix.remove(current);
             current = pixel_energy[current].parent;
         }
+        image.width -= 1;
     }
+    image.pixels = original_image_pix;
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        panic!("Expected a file!");
+    if args.len() != 3 {
+        panic!("Expected a file and a column number!");
     }
 
     let mut ppm = parse_ppm(&args[1]).unwrap_or_else(|error| panic!("{}", error));
-    for arg in &args[2..] {
-        match arg.as_str() {
-            "gray" => apply_grayscale(&mut ppm),
-            "gauss" => apply_gaussian_blur(&mut ppm),
-            "sobel" => apply_sobel(&mut ppm),
-            "resize" => resize_width(&mut ppm, 1),
-            _ => panic!("Unnexpected filter given: {}", arg),
-        }
-    }
+    let columns_to_remove = args[2]
+        .parse::<usize>()
+        .unwrap_or_else(|error| panic!("olumns are not a number: {}", error));
+    resize_width(&mut ppm, columns_to_remove);
 
     let out = Path::new(&args[1]);
     save_ppm(
