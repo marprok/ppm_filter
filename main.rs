@@ -33,7 +33,7 @@ fn next_token(
     String::from_utf8(bytes[from..*offset].to_vec())
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 struct Pixel {
     r: f32,
     g: f32,
@@ -233,86 +233,112 @@ fn apply_sobel(image: &mut PpmFile) {
 #[derive(Clone)]
 struct Energy {
     value: u32,
-    parent: usize,
+    parent_x: usize,
+    parent_y: usize,
+    rgb: Pixel,
+    intensity: u32,
 }
 
 fn resize_width(image: &mut PpmFile, columns: usize) {
-    let mut original_image_pix = image.pixels.clone();
+    let mut image_energy: Vec<Vec<Energy>> = Vec::new();
+    image_energy.reserve(image.height);
+    for y in 0..image.height {
+        image_energy.push(Vec::new());
+        image_energy[y].reserve(image.width);
+        for x in 0..image.width {
+            image_energy[y].push(Energy {
+                value: 0,
+                parent_x: x,
+                parent_y: y,
+                rgb: image.pixels[y * image.width + x],
+                intensity: 0,
+            });
+        }
+    }
     apply_grayscale(image);
     apply_gaussian_blur(image);
     apply_sobel(image);
+    // store the intensity
+    for y in 0..image.height {
+        for x in 0..image.width {
+            image_energy[y][x].intensity = (image.pixels[y * image.width + x].r * 255.0) as u32;
+        }
+    }
+    image.pixels.clear();
     for _ in 0..columns {
-        let mut pixel_energy: Vec<Energy> = Vec::new();
-        pixel_energy.reserve(image.width * image.height);
         for y in 0..image.height {
             for x in 0..image.width {
-                pixel_energy.push(Energy {
-                    value: (image.pixels[y * image.width + x].r * 255.0) as u32,
-                    parent: 0,
-                });
+                image_energy[y][x].value = image_energy[y][x].intensity;
+                image_energy[y][x].parent_x = x;
+                image_energy[y][x].parent_y = y;
             }
         }
         for y in 1..image.height {
             for x in 0..image.width {
-                let mut energy = pixel_energy[y * image.width + x].value;
-                let mut pixel_id: usize = y * image.width + x;
-
-                let mut top_left = u32::MAX;
-                if x > 0 {
-                    top_left = match pixel_energy.get((y - 1) * image.width + x - 1) {
-                        Some(ref energy) => energy.value,
-                        None => u32::MAX,
-                    };
-                }
-
-                let top_center = match pixel_energy.get((y - 1) * image.width + x) {
-                    Some(ref energy) => energy.value,
-                    None => u32::MAX,
+                let top_left = if x > 0 {
+                    image_energy[y - 1][x - 1].value
+                } else {
+                    u32::MAX
                 };
-                let top_right = match pixel_energy.get((y - 1) * image.width + x + 1) {
-                    Some(ref energy) => energy.value,
-                    None => u32::MAX,
+
+                let top_center = image_energy[y - 1][x].value;
+                let top_right = if x < image.width - 1 {
+                    image_energy[y - 1][x + 1].value
+                } else {
+                    u32::MAX
                 };
 
                 if top_left < top_right {
                     if top_left < top_center {
-                        energy += top_left;
+                        image_energy[y][x].value += top_left;
                         if x > 0 {
-                            pixel_id = (y - 1) * image.width + x - 1;
+                            image_energy[y][x].parent_x = x - 1;
+                            image_energy[y][x].parent_y = y - 1;
                         }
                     } else {
-                        energy += top_center;
-                        pixel_id = (y - 1) * image.width + x;
+                        image_energy[y][x].value += top_center;
+                        image_energy[y][x].parent_x = x;
+                        image_energy[y][x].parent_y = y - 1;
                     }
                 } else if top_right < top_center {
-                    energy += top_right;
-                    pixel_id = (y - 1) * image.width + x + 1;
+                    image_energy[y][x].value += top_right;
+                    image_energy[y][x].parent_x = x + 1;
+                    image_energy[y][x].parent_y = y - 1;
                 } else {
-                    energy += top_center;
-                    pixel_id = (y - 1) * image.width + x;
+                    image_energy[y][x].value += top_center;
+                    image_energy[y][x].parent_x = x;
+                    image_energy[y][x].parent_y = y - 1;
                 }
-                pixel_energy[y * image.width + x].value = energy;
-                pixel_energy[y * image.width + x].parent = pixel_id;
             }
         }
 
         let mut min_id = 0;
         let mut min_energy: u32 = u32::MAX;
         for i in 0..image.width {
-            if min_energy > pixel_energy[(image.height - 1) * image.width + i].value {
-                min_energy = pixel_energy[(image.height - 1) * image.width + i].value;
+            if min_energy > image_energy[image.height - 1][i].value {
+                min_energy = image_energy[image.height - 1][i].value;
                 min_id = i;
             }
         }
-        let mut current = (image.height - 1) * image.width + min_id;
+        let mut current_x = min_id;
+        let mut current_y = image.height - 1;
         for _ in 0..image.height {
-            original_image_pix.remove(current);
-            image.pixels.remove(current);
-            current = pixel_energy[current].parent;
+            let parent_x = image_energy[current_y][current_x].parent_x;
+            let parent_y = image_energy[current_y][current_x].parent_y;
+            image_energy[current_y].remove(current_x);
+            if image_energy[current_y].is_empty() {
+                image_energy.remove(current_y);
+            }
+            current_y = parent_y;
+            current_x = parent_x;
         }
         image.width -= 1;
     }
-    image.pixels = original_image_pix;
+    for y in 0..image.height {
+        for x in 0..image.width {
+            image.pixels.push(image_energy[y][x].rgb);
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
