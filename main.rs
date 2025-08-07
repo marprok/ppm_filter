@@ -294,11 +294,7 @@ fn save_ppm(image: &PpmFile, name: &str) -> std::io::Result<()> {
 
 fn resize_width(image: &mut PpmFile, columns: usize) {
     let mut bw = image.to_gray();
-    //_ = save_ppm(&bw.to_rgb(), "grey.ppm");
-    let bw = bw.gaussian_blur();
-    //_ = save_ppm(&bw.to_rgb(), "gaus.ppm");
-    let bw = bw.sobel();
-    //_ = save_ppm(&bw.to_rgb(), "sobel.ppm");
+    let bw = bw.gaussian_blur().sobel();
     for _ in 0..columns {
         let mut energy = bw.to_energy();
         for y in 1..image.h {
@@ -353,10 +349,6 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         for _ in 0..image.h {
             let parent_x = energy[current_y][current_x].parent_x;
             let parent_y = energy[current_y][current_x].parent_y;
-            /*println!(
-                "current {}, {} parent {}, {}",
-                current_x, current_y, parent_x, parent_y
-            );*/
             bw.pixels[current_y].remove(current_x);
             image.pixels[current_y].remove(current_x);
             if bw.pixels[current_y].is_empty() {
