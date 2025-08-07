@@ -1,17 +1,24 @@
 use anyhow::{bail, Context, Result};
-use std::env;
-use std::error::Error;
+use clap::Parser;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
-use std::string::FromUtf8Error;
+use std::path::PathBuf;
 
-fn next_token(
-    bytes: &Vec<u8>,
-    offset: &mut usize,
-    delims: &Vec<u8>,
-) -> Result<String, FromUtf8Error> {
+/// Resize a PPM image
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Path to PPM file
+    #[arg(short, long)]
+    file: PathBuf,
+
+    /// Number of columns to remove
+    #[arg(short, long)]
+    cols: usize,
+}
+
+fn next_token(bytes: &Vec<u8>, offset: &mut usize, delims: &Vec<u8>) -> Result<String> {
     // skip depims and comments
     while delims.contains(&bytes[*offset]) {
         // skip the entire line in case of comments
@@ -31,7 +38,8 @@ fn next_token(
         }
         *offset += 1;
     }
-    String::from_utf8(bytes[from..*offset].to_vec())
+    Ok(String::from_utf8(bytes[from..*offset].to_vec())
+        .context(format!("Could not parse bytes at offset {}", offset))?)
 }
 
 #[derive(Copy, Clone)]
@@ -370,26 +378,13 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        bail!("Expected a file and a column number!");
-    }
-
-    let mut ppm = parse_ppm(&args[1]).unwrap_or_else(|error| panic!("{}", error));
-    let columns_to_remove = args[2].parse::<usize>().context("Columns not a number")?;
-    resize_width(&mut ppm, columns_to_remove);
-
-    let out = Path::new(&args[1]);
+    let args = Args::parse();
+    let file_path = args.file.display().to_string();
+    let mut ppm = parse_ppm(&file_path).context(format!("Could not parse {}", file_path))?;
+    resize_width(&mut ppm, args.cols);
     save_ppm(
         &ppm,
-        &format!(
-            "{}_new.ppm",
-            out.file_stem()
-                .unwrap()
-                .to_os_string()
-                .into_string()
-                .unwrap()
-        ),
+        &format!("{}_new.ppm", args.file.file_stem().unwrap().display()),
     )?;
 
     Ok(())
