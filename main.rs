@@ -1,3 +1,4 @@
+use anyhow::{bail, Context, Result};
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -208,46 +209,48 @@ impl<'a> BWImage {
     }
 }
 
-fn parse_ppm(file: &str) -> Result<PpmFile, String> {
-    let bytes: Vec<u8> =
-        fs::read(file).unwrap_or_else(|error| panic!("Could not read file: {}", error));
+fn parse_ppm(file: &str) -> Result<PpmFile> {
+    let bytes: Vec<u8> = fs::read(file).context(format!("Failed to load file {}", file))?;
 
     if bytes.len() < 2 {
-        return Err(format!("PPM file too small!"));
+        bail!(
+            "File size is too small to be a valid PPM image! {}",
+            bytes.len()
+        );
     }
 
     let mut byte_id = 0;
     let delims: Vec<u8> = vec![0x20, 0x09, 0x0D, 0x0A, 0x23];
 
-    let magic_number = next_token(&bytes, &mut byte_id, &delims)
-        .unwrap_or_else(|error| panic!("Magic number: {}", error));
+    let magic_number =
+        next_token(&bytes, &mut byte_id, &delims).context("Failed while reading magic number")?;
 
     let width = next_token(&bytes, &mut byte_id, &delims)
-        .unwrap_or_else(|error| panic!("Could not read width: {}", error))
+        .context("Failed while reading width")?
         .parse::<usize>()
-        .unwrap_or_else(|error| panic!("Width not a number: {}", error));
+        .context("Width not a number")?;
 
     let height = next_token(&bytes, &mut byte_id, &delims)
-        .unwrap_or_else(|error| panic!("Could not read height: {}", error))
+        .context("Failed while reading height")?
         .parse::<usize>()
-        .unwrap_or_else(|error| panic!("Height not a number: {}", error));
+        .context("Height not a number")?;
 
     let max_color_val = next_token(&bytes, &mut byte_id, &delims)
-        .unwrap_or_else(|error| panic!("Could not read max color value: {}", error))
+        .context("Failed while reading max color value")?
         .parse::<usize>()
-        .unwrap_or_else(|error| panic!("Max color value not a number: {}", error));
+        .context("Max color value not a number")?;
 
     if magic_number != "P6" {
-        panic!("Unknown magic number: {}", magic_number);
+        bail!("Unknown magic number: {}", magic_number);
     }
 
     if max_color_val != 255 {
-        panic!("Maximum color value is not 255!");
+        bail!("Maximum color value is not 255!");
     }
 
     // The last char should be whitespace
     if bytes[byte_id] == 0x23 || !delims.contains(&bytes[byte_id]) {
-        panic!(
+        bail!(
             "The header should end with a whitespace but {} found!",
             bytes[byte_id]
         );
@@ -275,9 +278,13 @@ fn parse_ppm(file: &str) -> Result<PpmFile, String> {
     })
 }
 
-fn save_ppm(image: &PpmFile, name: &str) -> std::io::Result<()> {
+fn save_ppm(image: &PpmFile, name: &str) -> Result<()> {
     let mut file = File::create(name)?;
-    file.write_all(format!("P6\n{}\n{}\n{}\n", image.w, image.h, image.max_val).as_bytes())?;
+    file.write_all(format!("P6\n{}\n{}\n{}\n", image.w, image.h, image.max_val).as_bytes())
+        .context(format!(
+            "Could not write image header P6\n{}\n{}\n{}\n",
+            image.w, image.h, image.max_val
+        ))?;
 
     let mut bytes: Vec<u8> = Vec::new();
     bytes.resize(image.w * image.h * 3, 0u8);
@@ -362,16 +369,14 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
-        panic!("Expected a file and a column number!");
+        bail!("Expected a file and a column number!");
     }
 
     let mut ppm = parse_ppm(&args[1]).unwrap_or_else(|error| panic!("{}", error));
-    let columns_to_remove = args[2]
-        .parse::<usize>()
-        .unwrap_or_else(|error| panic!("olumns are not a number: {}", error));
+    let columns_to_remove = args[2].parse::<usize>().context("Columns not a number")?;
     resize_width(&mut ppm, columns_to_remove);
 
     let out = Path::new(&args[1]);
