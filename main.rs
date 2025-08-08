@@ -48,29 +48,36 @@ struct Pixel {
     g: u8,
     b: u8,
 }
+#[derive(Clone)]
+struct PixelIntensity {
+    rgb: Pixel,
+    intensity: f32,
+}
 
-struct PpmFile {
+struct PpmFile<T> {
     max_val: usize,
-    pixels: Vec<Vec<Pixel>>,
+    pixels: Vec<Vec<T>>,
     w: usize,
     h: usize,
 }
 
-impl PpmFile {
-    fn to_gray(&self) -> BWImage {
+impl PpmFile<Pixel> {
+    fn to_gray(&self) -> PpmFile<PixelIntensity> {
         let mut bw_rows = Vec::new();
         bw_rows.reserve(self.pixels.len());
         for (i, row) in &mut self.pixels.iter().enumerate() {
             bw_rows.push(Vec::new());
             for pixel in row {
-                bw_rows[i].push(
-                    pixel.r as f32 / self.max_val as f32 * 0.216
+                bw_rows[i].push(PixelIntensity {
+                    rgb: *pixel,
+                    intensity: pixel.r as f32 / self.max_val as f32 * 0.216
                         + pixel.g as f32 / self.max_val as f32 * 0.7125
                         + pixel.b as f32 / self.max_val as f32 * 0.0722,
-                );
+                });
             }
         }
-        BWImage {
+        PpmFile {
+            max_val: self.max_val,
             pixels: bw_rows,
             w: self.w,
             h: self.h,
@@ -84,14 +91,7 @@ struct Energy {
     parent_y: usize,
 }
 
-#[derive(Clone)]
-struct BWImage {
-    pixels: Vec<Vec<f32>>,
-    w: usize,
-    h: usize,
-}
-
-impl<'a> BWImage {
+impl<'a> PpmFile<PixelIntensity> {
     fn to_energy(&'a mut self) -> Vec<Vec<Energy>> {
         let mut ret = Vec::new();
         ret.reserve(self.pixels.len());
@@ -100,7 +100,7 @@ impl<'a> BWImage {
             ret[r_id].reserve(row.len());
             for (c_id, pixel) in row.iter().enumerate() {
                 ret[r_id].push(Energy {
-                    value: (pixel * 250.0) as u32,
+                    value: (pixel.intensity * 250.0) as u32,
                     parent_x: c_id,
                     parent_y: r_id,
                 })
@@ -109,48 +109,46 @@ impl<'a> BWImage {
         ret
     }
     // 3*3 kernel
-    fn gaussian_blur(&'a mut self) -> &'a mut BWImage {
+    fn gaussian_blur(&'a mut self) -> &'a mut PpmFile<PixelIntensity> {
         let pixels = self.pixels.clone();
         for y in 0..self.h {
-            for x in 0..self.h {
+            for x in 0..self.w {
                 let mut val: f32 = 0.0;
                 // previous row
                 if y >= 1 {
                     if x >= 1 {
-                        val += pixels[y - 1][x - 1] / 16.0;
+                        val += pixels[y - 1][x - 1].intensity / 16.0;
                     }
-                    val += pixels[y - 1][x] / 8.0;
+                    val += pixels[y - 1][x].intensity / 8.0;
                     if x + 1 < self.w {
-                        val += pixels[y - 1][x + 1] / 16.0;
+                        val += pixels[y - 1][x + 1].intensity / 16.0;
                     }
                 }
                 // current row
                 if x >= 1 {
-                    val += pixels[y][x - 1] / 8.0;
+                    val += pixels[y][x - 1].intensity / 8.0;
                 }
-                val += pixels[y][x] / 4.0;
+                val += pixels[y][x].intensity / 4.0;
                 if x + 1 < self.w {
-                    val += pixels[y][x + 1] / 8.0;
+                    val += pixels[y][x + 1].intensity / 8.0;
                 }
                 // next row
                 if y + 1 < self.h {
                     if x >= 1 {
-                        val += pixels[y + 1][x - 1] / 16.0;
+                        val += pixels[y + 1][x - 1].intensity / 16.0;
                     }
-                    val += pixels[y + 1][x] / 8.0;
+                    val += pixels[y + 1][x].intensity / 8.0;
                     if x + 1 < self.w {
-                        val += pixels[y + 1][x + 1] / 16.0;
+                        val += pixels[y + 1][x + 1].intensity / 16.0;
                     }
                 }
-                self.pixels[y][x] = val;
-                self.pixels[y][x] = val;
-                self.pixels[y][x] = val;
+                self.pixels[y][x].intensity = val;
             }
         }
         self
     }
 
-    fn sobel(&'a mut self) -> &'a mut BWImage {
+    fn sobel(&'a mut self) -> &'a mut PpmFile<PixelIntensity> {
         let pixels = self.pixels.clone();
         for y in 0..self.h {
             for x in 0..self.w {
@@ -159,53 +157,49 @@ impl<'a> BWImage {
                 // previous row
                 if y >= 1 {
                     if x >= 1 {
-                        valx += pixels[y - 1][x - 1];
-                        valy += pixels[y - 1][x - 1];
+                        valx += pixels[y - 1][x - 1].intensity;
+                        valy += pixels[y - 1][x - 1].intensity;
                     }
-                    valy += 2.0 * pixels[y - 1][x];
+                    valy += 2.0 * pixels[y - 1][x].intensity;
                     if x + 1 < self.w {
-                        valx -= pixels[y - 1][x + 1];
-                        valy += pixels[y - 1][x + 1];
+                        valx -= pixels[y - 1][x + 1].intensity;
+                        valy += pixels[y - 1][x + 1].intensity;
                     }
                 }
                 // current row
                 if x >= 1 {
-                    valx += 2.0 * pixels[y][x - 1];
+                    valx += 2.0 * pixels[y][x - 1].intensity;
                 }
 
                 if x + 1 < self.w {
-                    valx -= 2.0 * pixels[y][x + 1];
+                    valx -= 2.0 * pixels[y][x + 1].intensity;
                 }
                 // next row
                 if y + 1 < self.h {
                     if x >= 1 {
-                        valx += pixels[y + 1][x - 1];
-                        valy -= pixels[y + 1][x - 1];
+                        valx += pixels[y + 1][x - 1].intensity;
+                        valy -= pixels[y + 1][x - 1].intensity;
                     }
-                    valy -= 2.0 * pixels[y + 1][x];
+                    valy -= 2.0 * pixels[y + 1][x].intensity;
                     if x + 1 < self.w {
-                        valx -= pixels[y + 1][x + 1];
-                        valy -= pixels[y + 1][x + 1];
+                        valx -= pixels[y + 1][x + 1].intensity;
+                        valy -= pixels[y + 1][x + 1].intensity;
                     }
                 }
                 let grad = f32::sqrt(valx * valx + valy * valy);
-                self.pixels[y][x] = if grad > 1.0 { 1.0 } else { grad };
+                self.pixels[y][x].intensity = if grad > 1.0 { 1.0 } else { grad };
             }
         }
         self
     }
 
-    fn to_rgb(&self) -> PpmFile {
+    fn to_rgb(&self) -> PpmFile<Pixel> {
         let mut rgb = Vec::new();
         rgb.reserve(self.h);
         for (i, row) in self.pixels.iter().enumerate() {
             rgb.push(Vec::new());
             for pixel in row {
-                rgb[i].push(Pixel {
-                    r: (pixel * 255.0) as u8,
-                    g: (pixel * 255.0) as u8,
-                    b: (pixel * 255.0) as u8,
-                });
+                rgb[i].push(pixel.rgb);
             }
         }
         PpmFile {
@@ -217,7 +211,7 @@ impl<'a> BWImage {
     }
 }
 
-fn parse_ppm(file: &str) -> Result<PpmFile> {
+fn parse_ppm(file: &str) -> Result<PpmFile<Pixel>> {
     let bytes: Vec<u8> = fs::read(file).context(format!("Failed to load file {}", file))?;
 
     if bytes.len() < 2 {
@@ -286,7 +280,7 @@ fn parse_ppm(file: &str) -> Result<PpmFile> {
     })
 }
 
-fn save_ppm(image: &PpmFile, name: &str) -> Result<()> {
+fn save_ppm(image: &PpmFile<Pixel>, name: &str) -> Result<()> {
     let mut file = File::create(name)?;
     file.write_all(format!("P6\n{}\n{}\n{}\n", image.w, image.h, image.max_val).as_bytes())
         .context(format!(
@@ -307,11 +301,11 @@ fn save_ppm(image: &PpmFile, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn resize_width(image: &mut PpmFile, columns: usize) {
-    let mut bw = image.to_gray();
-    let bw = bw.gaussian_blur().sobel();
+fn resize_width(image: PpmFile<Pixel>, columns: usize) -> PpmFile<Pixel> {
+    let mut image = image.to_gray();
+    let image = image.gaussian_blur().sobel();
     for _ in 0..columns {
-        let mut energy = bw.to_energy();
+        let mut energy = image.to_energy();
         for y in 1..image.h {
             for x in 0..image.w {
                 let top_left = if x > 0 {
@@ -364,10 +358,8 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         for _ in 0..image.h {
             let parent_x = energy[current_y][current_x].parent_x;
             let parent_y = energy[current_y][current_x].parent_y;
-            bw.pixels[current_y].remove(current_x);
             image.pixels[current_y].remove(current_x);
-            if bw.pixels[current_y].is_empty() {
-                bw.pixels.remove(current_y);
+            if image.pixels[current_y].is_empty() {
                 image.pixels.remove(current_y);
             }
             current_y = parent_y;
@@ -375,13 +367,14 @@ fn resize_width(image: &mut PpmFile, columns: usize) {
         }
         image.w -= 1;
     }
+    image.to_rgb()
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
     let file_path = args.file.display().to_string();
     let mut ppm = parse_ppm(&file_path).context(format!("Could not parse {}", file_path))?;
-    resize_width(&mut ppm, args.cols);
+    ppm = resize_width(ppm, args.cols);
     save_ppm(
         &ppm,
         &format!("{}_new.ppm", args.file.file_stem().unwrap().display()),
