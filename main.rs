@@ -159,32 +159,32 @@ impl<'a> BWImage {
                 // previous row
                 if y >= 1 {
                     if x >= 1 {
-                        valx -= pixels[y - 1][x - 1];
+                        valx += pixels[y - 1][x - 1];
                         valy += pixels[y - 1][x - 1];
                     }
                     valy += 2.0 * pixels[y - 1][x];
                     if x + 1 < self.w {
-                        valx += pixels[y - 1][x + 1];
+                        valx -= pixels[y - 1][x + 1];
                         valy += pixels[y - 1][x + 1];
                     }
                 }
                 // current row
                 if x >= 1 {
-                    valx -= 2.0 * pixels[y][x - 1];
+                    valx += 2.0 * pixels[y][x - 1];
                 }
 
                 if x + 1 < self.w {
-                    valx += 2.0 * pixels[y][x + 1];
+                    valx -= 2.0 * pixels[y][x + 1];
                 }
                 // next row
                 if y + 1 < self.h {
                     if x >= 1 {
-                        valx -= pixels[y + 1][x - 1];
+                        valx += pixels[y + 1][x - 1];
                         valy -= pixels[y + 1][x - 1];
                     }
                     valy -= 2.0 * pixels[y + 1][x];
                     if x + 1 < self.w {
-                        valx += pixels[y + 1][x + 1];
+                        valx -= pixels[y + 1][x + 1];
                         valy -= pixels[y + 1][x + 1];
                     }
                 }
