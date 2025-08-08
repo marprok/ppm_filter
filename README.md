@@ -1,16 +1,10 @@
-# Disclaimer
-This is my first attempt on writing an actual "useful" program in Rust.
-I am sure many things can be done better, I just don't know how at the moment :P
+# ppm_sc
+An implementation of the seam carving algorithm.
 ## Description
-This tool parses a P6 PPM image file and allows the user to specify any combination of operations to be applied to it.
-The supported operations are the following:
-- Gaussian Blur
-- Sobel Operator
-- Grayscale
-
+Content-aware image resizing for P6 PPM images.
 ## Compile
-`rustc main.rs`
-
+`cargo build`
 ## Example usage
-`./main <file-name> gray gauss sobel`
-
+`cargo run -- -f images/Image05.ppm -c 400`
+## Limitations
+Currently, only resizing by width is supported.
